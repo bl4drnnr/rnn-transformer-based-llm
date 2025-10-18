@@ -26,6 +26,7 @@ This project implements and compares two neural language model architectures for
 
 ### Key Features
 
+- **Speakleash Integration** - Built-in dataset downloader for Polish language corpora
 - **Causal Language Modeling** - Predicts the next token in a sequence
 - **BPE Tokenization** - Custom Byte-Pair Encoding tokenizer trained on your data
 - **Dual Evaluation** - In-domain (test set) and out-of-domain (Wikipedia)
@@ -375,7 +376,7 @@ This prevents the model from "cheating" by seeing future tokens.
 
 1. **Clone/navigate to the project directory**:
 ```bash
-cd "/path/to/LAB1 13.10.2025"
+cd "rnn-transformer-based-llm"
 ```
 
 2. **Install dependencies**:
@@ -401,22 +402,26 @@ python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'MPS ava
 ### Quick Reference
 
 ```bash
-# 1. Preprocess data
-python scripts/preprocess_data.py --input data/raw/polish_news.txt --config rnn --file-type txt
+# 1. Download dataset from Speakleash
+python main.py --list  # List available datasets
+python main.py shopping_1_general_corpus  # Download dataset
 
-# 2. Train both models
+# 2. Preprocess data
+python scripts/preprocess_data.py --input data/raw/shopping_1_general_corpus.txt --config rnn --file-type txt
+
+# 3. Train both models
 python scripts/train.py --model rnn
 python scripts/train.py --model transformer
 
-# 3. Evaluate on test set (in-domain)
+# 4. Evaluate on test set (in-domain)
 python scripts/evaluate.py --model rnn --checkpoint checkpoints/rnn_best.pt --data test
 python scripts/evaluate.py --model transformer --checkpoint checkpoints/transformer_best.pt --data test
 
-# 4. Evaluate on Wikipedia (out-of-domain) - optional
+# 5. Evaluate on Wikipedia (out-of-domain) - optional
 python scripts/evaluate.py --model rnn --checkpoint checkpoints/rnn_best.pt --data wikipedia
 python scripts/evaluate.py --model transformer --checkpoint checkpoints/transformer_best.pt --data wikipedia
 
-# 5. Generate text
+# 6. Generate text
 python scripts/generate.py --model rnn --checkpoint checkpoints/rnn_best.pt \
   --prompts "Warszawa jest" "W Polsce" "Dzisiaj"
 python scripts/generate.py --model transformer --checkpoint checkpoints/transformer_best.pt \
@@ -427,39 +432,47 @@ python scripts/generate.py --model transformer --checkpoint checkpoints/transfor
 
 ## Detailed Usage Guide
 
-### Step 1: Prepare Your Data
+### Step 1: Download Dataset from Speakleash
 
-Your data should be Polish text from a specific domain (e.g., news, literature, social media).
+This project uses the [Speakleash](https://github.com/speakleash/speakleash) library to download Polish language datasets. Speakleash provides curated Polish corpora from various domains (news, social media, literature, shopping, etc.).
 
-**Data Format Options:**
-
-1. **Plain text file** (`.txt`): One document per line
-   ```
-   To jest pierwszy dokument.
-   To jest drugi dokument o polityce.
-   Trzeci dokument o sporcie.
-   ```
-
-2. **JSONL file** (`.jsonl`): One JSON object per line
-   ```json
-   {"text": "To jest pierwszy dokument.", "metadata": "..."}
-   {"text": "To jest drugi dokument o polityce.", "metadata": "..."}
-   ```
-
-**Where to get data:**
-- [Speakleash](https://github.com/speakleash/speakleash) - Polish language corpus
-- [OSCAR](https://oscar-corpus.com/) - Multilingual corpus
-- [Polish Wikipedia dumps](https://dumps.wikimedia.org/plwiki/)
-- Your own domain-specific corpus
-
-**Place your data:**
+**List available datasets:**
 ```bash
-# Create directory if needed
-mkdir -p data/raw
-
-# Copy your data
-cp /path/to/your/data.txt data/raw/polish_news.txt
+python main.py --list
 ```
+
+This will show all available datasets with information about:
+- Dataset name
+- Category (Internet, Literature, etc.)
+- Size in GB
+- Number of documents and words
+- License information
+
+**Example output:**
+```
+Name: shopping_1_general_corpus
+Category: Internet
+Size: 2.22 GB
+Documents: 2,105,419
+Words: 1,551,865,826
+License: conditional license
+```
+
+**Download a dataset:**
+```bash
+python main.py shopping_1_general_corpus
+```
+
+The script will:
+1. Display dataset information and disclaimer
+2. Ask for confirmation
+3. Download the dataset (progress bar shown)
+4. Save it to `data/raw/shopping_1_general_corpus.txt` (one document per line)
+5. Show next steps for preprocessing
+
+**Popular datasets for language modeling:**
+- `shopping_1_general_corpus` - Product reviews and descriptions from ceneo.pl (~2.2GB, 2M docs)
+- Other datasets available via `--list` command
 
 ---
 
@@ -472,28 +485,18 @@ This step:
 4. Tokenizes all splits
 5. Saves processed data
 
-**For text files:**
+**Preprocess downloaded dataset:**
 ```bash
 python scripts/preprocess_data.py \
-  --input data/raw/polish_news.txt \
+  --input data/raw/shopping_1_general_corpus.txt \
   --config rnn \
   --file-type txt
 ```
 
-**For JSONL files:**
-```bash
-python scripts/preprocess_data.py \
-  --input data/raw/data.jsonl \
-  --config rnn \
-  --file-type jsonl \
-  --text-field text
-```
-
 **Arguments:**
-- `--input`: Path to your data file
+- `--input`: Path to downloaded dataset file from `data/raw/`
 - `--config`: Model config type (`rnn` or `transformer`) - affects vocab size, seq length
-- `--file-type`: `txt` or `jsonl`
-- `--text-field`: For JSONL, the field containing text (default: `text`)
+- `--file-type`: Always `txt` for Speakleash datasets
 
 **Output:**
 ```

@@ -222,7 +222,7 @@ def main():
             "Warszawa jest",
             "W Polsce",
             "Dzisiaj pogoda",
-            "Nauka jzyk�w obcych",
+            "Nauka języków obcych",
             "Sztuczna inteligencja",
         ]
         print("No prompts specified, using defaults...")

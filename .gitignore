@@ -32,3 +32,6 @@ results/*.txt
 results/*.png
 results/*.json
 results/*.csv
+
+CLAUDE.md
+speakleash_datasets_metadata/*

@@ -184,16 +184,16 @@ class PolishTokenizer:
 if __name__ == "__main__":
     # Test tokenizer
     sample_texts = [
-        "To jest przykBadowy tekst po polsku.",
-        "Witaj [wiecie! Jak si masz?",
-        "Uczenie maszynowe jest fascynujce.",
+        "To jest przykładowy tekst po polsku.",
+        "Witaj świecie! Jak się masz?",
+        "Uczenie maszynowe jest fascynujące.",
     ]
 
     tokenizer = PolishTokenizer(vocab_size=1000)
     tokenizer.train(sample_texts)
 
     # Test encoding/decoding
-    text = "Witaj [wiecie!"
+    text = "Witaj świecie!"
     ids = tokenizer.encode(text)
     decoded = tokenizer.decode(ids)
 
