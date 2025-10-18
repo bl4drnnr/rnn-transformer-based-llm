@@ -1,0 +1,246 @@
+"""
+Text generation script for trained language models.
+"""
+
+import sys
+from pathlib import Path
+import torch
+import argparse
+import time
+
+# Add parent directory to path
+sys.path.append(str(Path(__file__).parent.parent))
+
+from utils.config import get_config
+from utils.tokenizer import PolishTokenizer
+from models.rnn_model import RNNLanguageModel
+from models.transformer_model import TransformerLanguageModel
+
+
+def generate_text(
+    model_type: str,
+    checkpoint_path: str,
+    prompts: list[str],
+    max_length: int = 100,
+    temperature: float = 1.0,
+    top_k: int = 50,
+):
+    """
+    Generate text completions for given prompts.
+
+    Args:
+        model_type: Type of model ('rnn' or 'transformer')
+        checkpoint_path: Path to model checkpoint
+        prompts: List of prompt strings
+        max_length: Maximum length to generate
+        temperature: Sampling temperature
+        top_k: Top-k sampling parameter
+    """
+    print("=" * 80)
+    print(f"TEXT GENERATION - {model_type.upper()} MODEL")
+    print("=" * 80)
+
+    # Load configuration
+    config = get_config(model_type)
+    print(f"\nDevice: {config.device}")
+
+    # Load tokenizer
+    print("\nLoading tokenizer...")
+    tokenizer = PolishTokenizer(vocab_size=config.vocab_size)
+    tokenizer_path = config.data_processed_dir / "tokenizer.json"
+    tokenizer.load(tokenizer_path)
+
+    # Load checkpoint
+    print(f"Loading checkpoint from {checkpoint_path}...")
+    checkpoint = torch.load(checkpoint_path, map_location=config.device)
+
+    # Create model
+    print("Initializing model...")
+    if model_type == "rnn":
+        model = RNNLanguageModel(
+            vocab_size=config.vocab_size,
+            embedding_dim=config.embedding_dim,
+            hidden_dim=config.hidden_dim,
+            num_layers=config.num_layers,
+            dropout=config.dropout,
+            rnn_type=config.rnn_type,
+            pad_token_id=tokenizer.pad_token_id,
+        )
+    else:  # transformer
+        model = TransformerLanguageModel(
+            vocab_size=config.vocab_size,
+            d_model=config.embedding_dim,
+            num_heads=config.num_heads,
+            num_layers=config.num_layers,
+            d_ff=config.ff_dim,
+            max_seq_len=config.max_seq_length,
+            dropout=config.dropout,
+            pad_token_id=tokenizer.pad_token_id,
+        )
+
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model = model.to(config.device)
+    model.eval()
+
+    print(f"Model parameters: {model.get_num_parameters():,}")
+
+    # Generate for each prompt
+    print("\n" + "=" * 80)
+    print("GENERATING TEXT")
+    print("=" * 80)
+
+    results = []
+
+    for i, prompt in enumerate(prompts):
+        print(f"\nPrompt {i + 1}/{len(prompts)}:")
+        print(f"  Input: \"{prompt}\"")
+
+        # Encode prompt
+        input_ids = tokenizer.encode(prompt, add_special_tokens=False)
+        input_tensor = torch.tensor([input_ids], dtype=torch.long).to(config.device)
+
+        # Generate
+        start_time = time.time()
+        with torch.no_grad():
+            generated_ids = model.generate(
+                input_tensor,
+                max_length=max_length,
+                temperature=temperature,
+                top_k=top_k,
+                eos_token_id=tokenizer.eos_token_id,
+            )
+        gen_time = time.time() - start_time
+
+        # Decode
+        generated_text = tokenizer.decode(generated_ids[0].tolist(), skip_special_tokens=True)
+
+        # Extract only the generated part (after the prompt)
+        # This is approximate since tokenization might differ
+        completion = generated_text[len(prompt):].strip() if generated_text.startswith(prompt) else generated_text
+
+        print(f"  Output: \"{generated_text}\"")
+        print(f"  Time: {gen_time:.3f}s")
+
+        results.append({
+            "prompt": prompt,
+            "completion": completion,
+            "full_text": generated_text,
+            "time": gen_time,
+        })
+
+    # Save results
+    print("\n" + "=" * 80)
+    print("SAVING RESULTS")
+    print("=" * 80)
+
+    results_path = config.results_dir / f"{model_type}_generations.txt"
+    with open(results_path, "w", encoding="utf-8") as f:
+        f.write(f"Text Generation Results - {model_type.upper()} Model\n")
+        f.write("=" * 80 + "\n")
+        f.write(f"Checkpoint: {checkpoint_path}\n")
+        f.write(f"Max length: {max_length}\n")
+        f.write(f"Temperature: {temperature}\n")
+        f.write(f"Top-k: {top_k}\n")
+        f.write("=" * 80 + "\n\n")
+
+        for i, result in enumerate(results):
+            f.write(f"PROMPT {i + 1}:\n")
+            f.write(f"{result['prompt']}\n\n")
+            f.write(f"COMPLETION:\n")
+            f.write(f"{result['full_text']}\n\n")
+            f.write(f"Time: {result['time']:.3f}s\n")
+            f.write("-" * 80 + "\n\n")
+
+    print(f"Results saved to: {results_path}")
+
+    # Also save as JSON for programmatic access
+    import json
+    json_path = config.results_dir / f"{model_type}_generations.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    print(f"JSON results saved to: {json_path}")
+    print("=" * 80)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Generate text with trained model")
+    parser.add_argument(
+        "--model",
+        type=str,
+        required=True,
+        choices=["rnn", "transformer"],
+        help="Model type",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        type=str,
+        required=True,
+        help="Path to model checkpoint",
+    )
+    parser.add_argument(
+        "--prompts",
+        type=str,
+        nargs="+",
+        help="Text prompts for generation",
+    )
+    parser.add_argument(
+        "--prompts-file",
+        type=str,
+        help="File containing prompts (one per line)",
+    )
+    parser.add_argument(
+        "--max-length",
+        type=int,
+        default=100,
+        help="Maximum length to generate",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Sampling temperature",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=50,
+        help="Top-k sampling parameter",
+    )
+
+    args = parser.parse_args()
+
+    # Get prompts from either command line or file
+    if args.prompts_file:
+        with open(args.prompts_file, "r", encoding="utf-8") as f:
+            prompts = [line.strip() for line in f if line.strip()]
+    elif args.prompts:
+        prompts = args.prompts
+    else:
+        # Default Polish prompts
+        prompts = [
+            "Warszawa jest",
+            "W Polsce",
+            "Dzisiaj pogoda",
+            "Nauka jzyków obcych",
+            "Sztuczna inteligencja",
+        ]
+        print("No prompts specified, using defaults...")
+
+    checkpoint_path = Path(args.checkpoint)
+    if not checkpoint_path.exists():
+        print(f"Error: Checkpoint not found: {checkpoint_path}")
+        return
+
+    generate_text(
+        args.model,
+        str(checkpoint_path),
+        prompts,
+        args.max_length,
+        args.temperature,
+        args.top_k,
+    )
+
+
+if __name__ == "__main__":
+    main()
