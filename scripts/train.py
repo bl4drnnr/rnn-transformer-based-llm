@@ -17,6 +17,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from utils.config import get_config, RNNConfig, TransformerConfig
 from utils.dataset import create_dataloaders
 from utils.metrics import MetricsTracker, evaluate_model, calculate_perplexity
+from utils.plotting import TrainingPlotter
 from models.rnn_model import RNNLanguageModel
 from models.transformer_model import TransformerLanguageModel
 
@@ -83,6 +84,7 @@ def train_epoch(
 
 def train(
     model_type: str = "rnn",
+    dataset: str = None,
     resume_from: str = None,
 ):
     """
@@ -90,6 +92,7 @@ def train(
 
     Args:
         model_type: Type of model ('rnn' or 'transformer')
+        dataset: Dataset name (e.g., 'shopping_1_general_corpus')
         resume_from: Path to checkpoint to resume from
     """
     print("=" * 80)
@@ -98,16 +101,30 @@ def train(
 
     # Load configuration
     config = get_config(model_type)
-    print(f"\nConfiguration: {config}")
+
+    # Auto-detect dataset if not specified
+    if dataset is None:
+        # Look for metadata files in processed dir
+        metadata_files = list(config.data_processed_dir.glob("*_metadata.json"))
+        if not metadata_files:
+            raise ValueError("No preprocessed dataset found. Please run preprocess_data.py first.")
+        if len(metadata_files) > 1:
+            raise ValueError(f"Multiple datasets found: {[f.stem.replace('_metadata', '') for f in metadata_files]}. Please specify --dataset")
+        dataset = metadata_files[0].stem.replace('_metadata', '')
+        print(f"\nAuto-detected dataset: {dataset}")
+
+    config.dataset_name = dataset
+    print(f"Dataset: {dataset}")
+    print(f"Configuration: {config}")
     print(f"Device: {config.device}")
 
     # Load preprocessed data
     print("\nLoading preprocessed data...")
-    train_ids = torch.load(config.data_processed_dir / "train_ids.pt")
-    val_ids = torch.load(config.data_processed_dir / "val_ids.pt")
-    test_ids = torch.load(config.data_processed_dir / "test_ids.pt")
+    train_ids = torch.load(config.data_processed_dir / f"{dataset}_train_ids.pt")
+    val_ids = torch.load(config.data_processed_dir / f"{dataset}_val_ids.pt")
+    test_ids = torch.load(config.data_processed_dir / f"{dataset}_test_ids.pt")
 
-    with open(config.data_processed_dir / "metadata.json", "r") as f:
+    with open(config.data_processed_dir / f"{dataset}_metadata.json", "r") as f:
         metadata = json.load(f)
         pad_token_id = metadata["pad_token_id"]
 
@@ -166,11 +183,14 @@ def train(
         mode='min',
         factor=0.5,
         patience=2,
-        verbose=True,
     )
 
     # Metrics tracker
     metrics = MetricsTracker()
+
+    # Initialize plotter with dataset-specific model name
+    model_name_with_dataset = f"{dataset}_{model_type}"
+    plotter = TrainingPlotter(save_dir=config.results_dir, model_name=model_name_with_dataset)
 
     # Resume from checkpoint if specified
     start_epoch = 0
@@ -238,7 +258,7 @@ def train(
 
         # Save checkpoint
         if (epoch + 1) % config.save_every_n_epochs == 0 or val_loss < best_val_loss:
-            checkpoint_path = config.checkpoints_dir / f"{model_type}_epoch_{epoch + 1}.pt"
+            checkpoint_path = config.checkpoints_dir / f"{dataset}_{model_type}_epoch_{epoch + 1}.pt"
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
@@ -252,7 +272,7 @@ def train(
         # Save best model
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            best_model_path = config.checkpoints_dir / f"{model_type}_best.pt"
+            best_model_path = config.checkpoints_dir / f"{dataset}_{model_type}_best.pt"
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
@@ -263,6 +283,9 @@ def train(
             }, best_model_path)
             print(f"  Best model saved: {best_model_path}")
 
+        # Generate and save plots
+        plotter.plot_all_metrics(metrics, epoch, plot_frequency=config.plot_every_n_epochs)
+
     # Training complete
     print("\n" + "=" * 80)
     print("TRAINING COMPLETE")
@@ -272,10 +295,14 @@ def train(
     print(f"Best validation perplexity: {calculate_perplexity(best_val_loss):.2f}")
 
     # Save metrics
-    metrics_path = config.results_dir / f"{model_type}_metrics.json"
+    metrics_path = config.results_dir / f"{dataset}_{model_type}_metrics.json"
     metrics.save(str(metrics_path))
 
+    # Create final summary plot
+    plotter.create_final_summary_plot(metrics_path)
+
     print(f"\nMetrics saved to: {metrics_path}")
+    print(f"Training plots saved to: {plotter.plots_dir}")
     print("=" * 80)
 
 
@@ -289,6 +316,12 @@ def main():
         help="Model type to train",
     )
     parser.add_argument(
+        "--dataset",
+        type=str,
+        default=None,
+        help="Dataset name (e.g., 'shopping_1_general_corpus'). Auto-detected if only one dataset exists.",
+    )
+    parser.add_argument(
         "--resume",
         type=str,
         default=None,
@@ -297,7 +330,7 @@ def main():
 
     args = parser.parse_args()
 
-    train(model_type=args.model, resume_from=args.resume)
+    train(model_type=args.model, dataset=args.dataset, resume_from=args.resume)
 
 
 if __name__ == "__main__":

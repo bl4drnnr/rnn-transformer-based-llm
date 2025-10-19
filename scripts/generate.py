@@ -24,6 +24,7 @@ def generate_text(
     max_length: int = 100,
     temperature: float = 1.0,
     top_k: int = 50,
+    dataset: str = None,
 ):
     """
     Generate text completions for given prompts.
@@ -35,6 +36,7 @@ def generate_text(
         max_length: Maximum length to generate
         temperature: Sampling temperature
         top_k: Top-k sampling parameter
+        dataset: Dataset name (auto-detected if not specified)
     """
     print("=" * 80)
     print(f"TEXT GENERATION - {model_type.upper()} MODEL")
@@ -42,17 +44,30 @@ def generate_text(
 
     # Load configuration
     config = get_config(model_type)
-    print(f"\nDevice: {config.device}")
+
+    # Auto-detect dataset if not specified
+    if dataset is None:
+        metadata_files = list(config.data_processed_dir.glob("*_metadata.json"))
+        if not metadata_files:
+            raise ValueError("No preprocessed dataset found.")
+        if len(metadata_files) > 1:
+            raise ValueError(f"Multiple datasets found. Please specify --dataset")
+        dataset = metadata_files[0].stem.replace('_metadata', '')
+        print(f"\nAuto-detected dataset: {dataset}")
+
+    config.dataset_name = dataset
+    print(f"Dataset: {dataset}")
+    print(f"Device: {config.device}")
 
     # Load tokenizer
     print("\nLoading tokenizer...")
     tokenizer = PolishTokenizer(vocab_size=config.vocab_size)
-    tokenizer_path = config.data_processed_dir / "tokenizer.json"
+    tokenizer_path = config.data_processed_dir / f"{dataset}_tokenizer.json"
     tokenizer.load(tokenizer_path)
 
     # Load checkpoint
     print(f"Loading checkpoint from {checkpoint_path}...")
-    checkpoint = torch.load(checkpoint_path, map_location=config.device)
+    checkpoint = torch.load(checkpoint_path, map_location=config.device, weights_only=False)
 
     # Create model
     print("Initializing model...")
@@ -133,10 +148,11 @@ def generate_text(
     print("SAVING RESULTS")
     print("=" * 80)
 
-    results_path = config.results_dir / f"{model_type}_generations.txt"
+    results_path = config.results_dir / f"{dataset}_{model_type}_generations.txt"
     with open(results_path, "w", encoding="utf-8") as f:
         f.write(f"Text Generation Results - {model_type.upper()} Model\n")
         f.write("=" * 80 + "\n")
+        f.write(f"Dataset: {dataset}\n")
         f.write(f"Checkpoint: {checkpoint_path}\n")
         f.write(f"Max length: {max_length}\n")
         f.write(f"Temperature: {temperature}\n")
@@ -155,7 +171,7 @@ def generate_text(
 
     # Also save as JSON for programmatic access
     import json
-    json_path = config.results_dir / f"{model_type}_generations.json"
+    json_path = config.results_dir / f"{dataset}_{model_type}_generations.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 
@@ -207,6 +223,12 @@ def main():
         default=50,
         help="Top-k sampling parameter",
     )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default=None,
+        help="Dataset name. Auto-detected if only one dataset exists.",
+    )
 
     args = parser.parse_args()
 
@@ -239,6 +261,7 @@ def main():
         args.max_length,
         args.temperature,
         args.top_k,
+        args.dataset,
     )
 
 

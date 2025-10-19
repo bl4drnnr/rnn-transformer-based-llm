@@ -10,10 +10,11 @@
 4. [Installation](#installation)
 5. [Complete Workflow](#complete-workflow)
 6. [Detailed Usage Guide](#detailed-usage-guide)
-7. [Configuration](#configuration)
-8. [Evaluation Metrics](#evaluation-metrics)
-9. [Tips & Troubleshooting](#tips--troubleshooting)
-10. [Expected Results](#expected-results)
+7. [Training Visualization & Plotting](#training-visualization--plotting)
+8. [Configuration](#configuration)
+9. [Evaluation Metrics](#evaluation-metrics)
+10. [Tips & Troubleshooting](#tips--troubleshooting)
+11. [Expected Results](#expected-results)
 
 ---
 
@@ -33,6 +34,7 @@ This project implements and compares two neural language model architectures for
 - **Perplexity Metrics** - Standard metric for language model quality
 - **Time Tracking** - Training and inference time measurement
 - **Text Generation** - Autoregressive text generation with temperature and top-k sampling
+- **Training Visualization** - Automated plotting of loss, perplexity, learning rate, and training time
 - **Mac Optimized** - MPS (Metal Performance Shaders) support for Apple Silicon
 
 ### Lab Assignment Context
@@ -310,18 +312,16 @@ This prevents the model from "cheating" by seeing future tokens.
 ```
 .
 ├── data/
-│   ├── raw/                    # Your input data files
-│   │   └── polish_news.txt     # Example: domain-specific data
-│   ├── processed/              # Generated after preprocessing
-│   │   ├── tokenizer.json      # Trained BPE tokenizer
-│   │   ├── tokenizer_metadata.json
-│   │   ├── train_ids.pt        # Tokenized training data
-│   │   ├── val_ids.pt          # Tokenized validation data
-│   │   ├── test_ids.pt         # Tokenized test data
-│   │   ├── metadata.json       # Dataset statistics
-│   │   └── wikipedia_ids.pt    # (Optional) Wikipedia data
-│   └── wikipedia/              # Out-of-domain evaluation data
-│       └── polish_wiki.txt     # Polish Wikipedia sample
+│   ├── raw/                              # Your input data files
+│   │   └── shopping_1_general_corpus.txt # Downloaded datasets from Speakleash
+│   ├── processed/                        # Generated after preprocessing
+│   │   ├── shopping_1_general_corpus_tokenizer.json     # Trained BPE tokenizer
+│   │   ├── shopping_1_general_corpus_train_ids.pt       # Tokenized training data
+│   │   ├── shopping_1_general_corpus_val_ids.pt         # Tokenized validation data
+│   │   ├── shopping_1_general_corpus_test_ids.pt        # Tokenized test data
+│   │   └── shopping_1_general_corpus_metadata.json      # Dataset statistics
+│   └── wikipedia/                        # Out-of-domain evaluation data
+│       └── polish_wiki.txt               # Polish Wikipedia sample
 │
 ├── models/                     # Model implementations
 │   ├── __init__.py
@@ -333,34 +333,44 @@ This prevents the model from "cheating" by seeing future tokens.
 │   ├── config.py              # Configuration classes
 │   ├── tokenizer.py           # BPE tokenizer
 │   ├── dataset.py             # PyTorch datasets and dataloaders
-│   └── metrics.py             # Perplexity and evaluation metrics
+│   ├── metrics.py             # Perplexity and evaluation metrics
+│   └── plotting.py            # Training visualization utilities
 │
 ├── scripts/                    # Executable scripts
 │   ├── __init__.py
 │   ├── preprocess_data.py     # Data preprocessing pipeline
-│   ├── train.py               # Model training
+│   ├── train.py               # Model training (with automatic plotting)
 │   ├── evaluate.py            # Model evaluation
-│   └── generate.py            # Text generation
+│   ├── generate.py            # Text generation
+│   └── visualize_metrics.py   # Standalone visualization and comparison
 │
-├── checkpoints/                # Saved model checkpoints
-│   ├── rnn_best.pt            # Best RNN model
-│   ├── rnn_epoch_N.pt         # RNN checkpoints per epoch
-│   ├── transformer_best.pt    # Best Transformer model
-│   └── transformer_epoch_N.pt # Transformer checkpoints
+├── checkpoints/                                           # Saved model checkpoints
+│   ├── shopping_1_general_corpus_rnn_best.pt             # Best RNN model
+│   ├── shopping_1_general_corpus_rnn_epoch_N.pt          # RNN checkpoints per epoch
+│   ├── shopping_1_general_corpus_transformer_best.pt     # Best Transformer model
+│   └── shopping_1_general_corpus_transformer_epoch_N.pt  # Transformer checkpoints
 │
-├── results/                    # Evaluation results
-│   ├── rnn_metrics.json       # RNN training history
-│   ├── rnn_eval_test.json     # RNN test evaluation
-│   ├── rnn_eval_wikipedia.json # RNN Wikipedia evaluation
-│   ├── rnn_generations.txt    # RNN generated text
-│   ├── rnn_generations.json   # RNN generations (JSON)
-│   └── transformer_*.json/txt # Same for Transformer
+├── results/                                                # Evaluation results
+│   ├── plots/                                             # Training visualization plots
+│   │   ├── shopping_1_general_corpus_rnn_loss_epoch_N.png
+│   │   ├── shopping_1_general_corpus_rnn_perplexity_epoch_N.png
+│   │   ├── shopping_1_general_corpus_rnn_combined_metrics_epoch_N.png
+│   │   ├── shopping_1_general_corpus_transformer_*.png
+│   │   └── model_comparison.png
+│   ├── shopping_1_general_corpus_rnn_metrics.json        # RNN training history
+│   ├── shopping_1_general_corpus_rnn_eval_test.json      # RNN test evaluation
+│   ├── shopping_1_general_corpus_rnn_eval_wikipedia.json # RNN Wikipedia evaluation
+│   ├── shopping_1_general_corpus_rnn_generations.txt     # RNN generated text
+│   ├── shopping_1_general_corpus_rnn_generations.json    # RNN generations (JSON)
+│   └── shopping_1_general_corpus_transformer_*.json/txt  # Same for Transformer
 │
+├── main.py                    # Dataset download script (Speakleash integration)
 ├── pyproject.toml             # Project dependencies (uv)
-├── README.md                  # Lab assignment description
-├── DOCS.md                    # This file
+├── README.md                  # Complete documentation (this file)
 └── .gitignore
 ```
+
+**Note:** All processed data, checkpoints, and results are prefixed with the dataset name (e.g., `shopping_1_general_corpus_`). This allows you to work with multiple datasets simultaneously without file conflicts.
 
 ---
 
@@ -406,25 +416,28 @@ python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'MPS ava
 python main.py --list  # List available datasets
 python main.py shopping_1_general_corpus  # Download dataset
 
-# 2. Preprocess data
+# 2. Preprocess data (dataset name auto-extracted from filename)
 python scripts/preprocess_data.py --input data/raw/shopping_1_general_corpus.txt --config rnn --file-type txt
 
-# 3. Train both models
+# 3. Train both models (dataset auto-detected if only one exists)
 python scripts/train.py --model rnn
 python scripts/train.py --model transformer
 
-# 4. Evaluate on test set (in-domain)
-python scripts/evaluate.py --model rnn --checkpoint checkpoints/rnn_best.pt --data test
-python scripts/evaluate.py --model transformer --checkpoint checkpoints/transformer_best.pt --data test
+# With multiple datasets, specify which one:
+python scripts/train.py --model rnn --dataset shopping_1_general_corpus
 
-# 5. Evaluate on Wikipedia (out-of-domain) - optional
-python scripts/evaluate.py --model rnn --checkpoint checkpoints/rnn_best.pt --data wikipedia
-python scripts/evaluate.py --model transformer --checkpoint checkpoints/transformer_best.pt --data wikipedia
+# 4. Evaluate on test set (in-domain)
+python scripts/evaluate.py --model rnn --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt --data test
+python scripts/evaluate.py --model transformer --checkpoint checkpoints/shopping_1_general_corpus_transformer_best.pt --data test
+
+# 5. Evaluate on out-of-domain dataset (e.g., plwiki) - optional
+python scripts/evaluate.py --model rnn --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt --data out-of-domain --eval-dataset plwiki
+python scripts/evaluate.py --model transformer --checkpoint checkpoints/shopping_1_general_corpus_transformer_best.pt --data out-of-domain --eval-dataset plwiki
 
 # 6. Generate text
-python scripts/generate.py --model rnn --checkpoint checkpoints/rnn_best.pt \
+python scripts/generate.py --model rnn --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt \
   --prompts "Warszawa jest" "W Polsce" "Dzisiaj"
-python scripts/generate.py --model transformer --checkpoint checkpoints/transformer_best.pt \
+python scripts/generate.py --model transformer --checkpoint checkpoints/shopping_1_general_corpus_transformer_best.pt \
   --prompts "Warszawa jest" "W Polsce" "Dzisiaj"
 ```
 
@@ -501,13 +514,14 @@ python scripts/preprocess_data.py \
 **Output:**
 ```
 data/processed/
-  ├── tokenizer.json              # Trained BPE tokenizer
-  ├── tokenizer_metadata.json     # Tokenizer config
-  ├── train_ids.pt                # Training sequences (List[List[int]])
-  ├── val_ids.pt                  # Validation sequences
-  ├── test_ids.pt                 # Test sequences
-  └── metadata.json               # Dataset statistics
+  ├── shopping_1_general_corpus_tokenizer.json        # Trained BPE tokenizer
+  ├── shopping_1_general_corpus_train_ids.pt          # Training sequences
+  ├── shopping_1_general_corpus_val_ids.pt            # Validation sequences
+  ├── shopping_1_general_corpus_test_ids.pt           # Test sequences
+  └── shopping_1_general_corpus_metadata.json         # Dataset statistics
 ```
+
+**Note:** All files are prefixed with the dataset name (extracted from the input filename). This allows you to preprocess and train on multiple datasets without file conflicts.
 
 **Example output:**
 ```
@@ -561,6 +575,7 @@ python scripts/train.py --model transformer
 
 **Arguments:**
 - `--model`: Model type (`rnn` or `transformer`)
+- `--dataset`: (Optional) Dataset name - auto-detected if only one preprocessed dataset exists
 - `--resume`: (Optional) Path to checkpoint to resume from
 
 **Training process:**
@@ -630,11 +645,13 @@ Metrics saved to: results/rnn_metrics.json
 **Checkpoints saved:**
 ```
 checkpoints/
-  ├── rnn_best.pt              # Best model (lowest val loss)
-  ├── rnn_epoch_2.pt           # Checkpoint at epoch 2
-  ├── rnn_epoch_4.pt           # Checkpoint at epoch 4
+  ├── shopping_1_general_corpus_rnn_best.pt         # Best model (lowest val loss)
+  ├── shopping_1_general_corpus_rnn_epoch_2.pt      # Checkpoint at epoch 2
+  ├── shopping_1_general_corpus_rnn_epoch_4.pt      # Checkpoint at epoch 4
   └── ...
 ```
+
+**Note:** Checkpoint files are prefixed with `{dataset}_{model}` to support training multiple models on different datasets.
 
 **Each checkpoint contains:**
 - Model state dict (weights)
@@ -646,7 +663,7 @@ checkpoints/
 **Resume training:**
 ```bash
 # If training was interrupted
-python scripts/train.py --model rnn --resume checkpoints/rnn_epoch_4.pt
+python scripts/train.py --model rnn --resume checkpoints/shopping_1_general_corpus_rnn_epoch_4.pt
 ```
 
 **Metrics saved:**
@@ -669,20 +686,22 @@ python scripts/train.py --model rnn --resume checkpoints/rnn_epoch_4.pt
 
 ### Step 4: Evaluate Models
 
-Evaluate trained models on test data or Wikipedia.
+Evaluate trained models on test data or other datasets (out-of-domain).
 
 **Evaluate on test set (in-domain):**
 ```bash
 python scripts/evaluate.py \
   --model rnn \
-  --checkpoint checkpoints/rnn_best.pt \
+  --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt \
   --data test
 ```
 
 **Arguments:**
 - `--model`: Model type (`rnn` or `transformer`)
 - `--checkpoint`: Path to model checkpoint
-- `--data`: Dataset to evaluate on (`test`, `val`, or `wikipedia`)
+- `--data`: Dataset to evaluate on (`test`, `val`, or `out-of-domain`)
+- `--dataset`: (Optional) Model's training dataset name - auto-detected if only one exists
+- `--eval-dataset`: (Required for `out-of-domain`) Dataset name to evaluate on (e.g., `plwiki`)
 
 **Example output:**
 ```
@@ -721,55 +740,47 @@ Throughput: 19,903 tokens/s
 Results saved to: results/rnn_eval_test.json
 ```
 
-**Wikipedia Evaluation (Out-of-Domain):**
+**Out-of-Domain Evaluation:**
 
-First, prepare Wikipedia data:
+To evaluate a model on a different dataset (e.g., a model trained on shopping forums evaluated on Wikipedia):
 
-1. Download Polish Wikipedia sample to `data/wikipedia/polish_wiki.txt`
-
-2. Tokenize it using your trained tokenizer:
+1. **Download and preprocess the evaluation dataset** (e.g., Polish Wikipedia):
 ```bash
-cat > scripts/tokenize_wikipedia.py << 'EOF'
-import torch
-from pathlib import Path
-import sys
-sys.path.append(str(Path(__file__).parent.parent))
+# Download dataset from Speakleash
+python main.py plwiki
 
-from utils.tokenizer import PolishTokenizer
-from utils.dataset import load_text_file
-from tqdm import tqdm
-
-# Load trained tokenizer
-tokenizer = PolishTokenizer()
-tokenizer.load(Path('data/processed/tokenizer.json'))
-
-# Load Wikipedia text
-texts = load_text_file(Path('data/wikipedia/polish_wiki.txt'))
-
-# Tokenize
-wiki_ids = []
-for text in tqdm(texts, desc="Tokenizing Wikipedia"):
-    ids = tokenizer.encode(text, add_special_tokens=True)
-    wiki_ids.append(ids)
-
-# Save
-torch.save(wiki_ids, Path('data/processed/wikipedia_ids.pt'))
-print(f"Saved {len(wiki_ids)} Wikipedia sequences")
-EOF
-
-python scripts/tokenize_wikipedia.py
+# Preprocess it with the SAME configuration as your training data
+python scripts/preprocess_data.py \
+  --input data/raw/plwiki.txt \
+  --config rnn \
+  --file-type txt
 ```
 
-3. Evaluate models on Wikipedia:
+2. **Evaluate your trained model on the new dataset:**
 ```bash
-python scripts/evaluate.py --model rnn --checkpoint checkpoints/rnn_best.pt --data wikipedia
-python scripts/evaluate.py --model transformer --checkpoint checkpoints/transformer_best.pt --data wikipedia
+# Model trained on shopping_1_general_corpus, evaluated on plwiki
+python scripts/evaluate.py \
+  --model rnn \
+  --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt \
+  --data out-of-domain \
+  --eval-dataset plwiki
+
+# Compare with transformer
+python scripts/evaluate.py \
+  --model transformer \
+  --checkpoint checkpoints/shopping_1_general_corpus_transformer_best.pt \
+  --data out-of-domain \
+  --eval-dataset plwiki
 ```
+
+**Results will be saved as:**
+- `results/shopping_1_general_corpus_rnn_eval_ood_plwiki.json`
+- `results/shopping_1_general_corpus_transformer_eval_ood_plwiki.json`
 
 **Expected behavior:**
 - **In-domain (test)**: Lower perplexity (model has seen similar data)
-- **Out-of-domain (Wikipedia)**: Higher perplexity (different domain)
-- The difference shows how well the model generalizes
+- **Out-of-domain (different dataset)**: Higher perplexity (different domain/style)
+- The difference shows how well the model generalizes across domains
 
 ---
 
@@ -781,7 +792,7 @@ Generate text completions using trained models.
 ```bash
 python scripts/generate.py \
   --model rnn \
-  --checkpoint checkpoints/rnn_best.pt \
+  --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt \
   --prompts "Warszawa jest" "W Polsce" "Dzisiaj pogoda"
 ```
 
@@ -803,7 +814,7 @@ EOF
 
 python scripts/generate.py \
   --model rnn \
-  --checkpoint checkpoints/rnn_best.pt \
+  --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt \
   --prompts-file data/prompts.txt \
   --max-length 100 \
   --temperature 0.8 \
@@ -815,6 +826,7 @@ python scripts/generate.py \
 - `--checkpoint`: Path to checkpoint
 - `--prompts`: List of prompts (space-separated)
 - `--prompts-file`: File with prompts (one per line)
+- `--dataset`: (Optional) Dataset name - auto-detected if only one exists
 - `--max-length`: Max tokens to generate (default: 100)
 - `--temperature`: Sampling temperature (default: 1.0)
   - Lower (0.5-0.8): More focused, deterministic
@@ -902,22 +914,226 @@ Time: 0.234s
 
 ---
 
+## Training Visualization & Plotting
+
+The project includes an automated plotting system that tracks and visualizes training metrics in real-time. Plots are automatically generated during training to help you monitor model performance.
+
+### Features
+
+**Automatic Plot Generation During Training**
+
+When you run `python scripts/train.py --model rnn` or `python scripts/train.py --model transformer`, plots are automatically generated and saved after each epoch (by default).
+
+**Generated Plots**
+
+The system creates 6 different types of plots:
+
+1. **Loss Plot** - Training and validation loss over epochs
+2. **Perplexity Plot** - Training and validation perplexity over epochs
+3. **Learning Rate Plot** - Learning rate schedule (log scale)
+4. **Epoch Times Plot** - Time taken per epoch with average line
+5. **Combined Metrics Plot** - All metrics in a 2x2 grid
+6. **Overfitting Analysis** - Train vs val loss with generalization gap visualization
+7. **Summary Statistics** - Text-based summary of key metrics (generated at the end)
+
+**Plot Location**
+
+All plots are saved in: `results/plots/`
+
+- Individual plots: `results/plots/{model}_loss_epoch_{N}.png`
+- Combined plots: `results/plots/{model}_combined_metrics_epoch_{N}.png`
+- Final summary: `results/plots/{model}_summary_stats.png`
+
+### Usage
+
+**During Training (Automatic)**
+
+Plots are automatically generated when you train:
+
+```bash
+python scripts/train.py --model rnn
+# Plots automatically created in results/plots/ after each epoch
+```
+
+Example output:
+```
+Epoch 5 Summary:
+  Train Loss: 4.2341 | Train PPL: 68.87
+  Val Loss:   4.1123 | Val PPL:   61.23
+  LR: 0.001000 | Time: 153.2s
+  Best model saved: checkpoints/rnn_best.pt
+
+Generating training plots (Epoch 5)...
+Plots saved to: /path/to/results/plots
+```
+
+**Control Plot Frequency**
+
+Edit `utils/config.py` to control how often plots are generated:
+
+```python
+plot_every_n_epochs: int = 1  # Generate plots every N epochs
+```
+
+- Set to `1`: Plot after every epoch (default, recommended)
+- Set to `2`: Plot every 2 epochs (faster training, less I/O)
+- Set to `5`: Plot every 5 epochs (minimal overhead)
+
+**Manual Visualization from Saved Metrics**
+
+Recreate plots from saved metrics JSON files:
+
+```bash
+# Visualize specific model
+python scripts/visualize_metrics.py --metrics results/rnn_metrics.json
+
+# Visualize with custom name
+python scripts/visualize_metrics.py --metrics results/rnn_metrics.json --model-name "MyRNN"
+```
+
+**Compare RNN vs Transformer**
+
+Create side-by-side comparison plots:
+
+```bash
+# Compare both models
+python scripts/visualize_metrics.py --compare
+
+# With custom paths
+python scripts/visualize_metrics.py --compare \
+  --rnn-metrics results/rnn_metrics.json \
+  --transformer-metrics results/transformer_metrics.json
+```
+
+This creates:
+- `results/plots/model_comparison.png` - Side-by-side loss and perplexity comparison
+- Summary statistics table in terminal
+
+### Understanding the Plots
+
+**1. Loss Plot**
+- **X-axis**: Epoch number
+- **Y-axis**: Cross-entropy loss
+- **Lines**: Blue (train), Red (validation)
+- **Purpose**: Primary metric for training convergence
+- **What to look for**: Both lines should decrease; if validation stops decreasing while training continues, you may be overfitting
+
+**2. Perplexity Plot**
+- **X-axis**: Epoch number
+- **Y-axis**: Perplexity (exp of loss)
+- **Lines**: Blue (train), Red (validation)
+- **Purpose**: More interpretable metric (lower is better)
+- **What to look for**: Lower values indicate better predictions; validation perplexity should track training perplexity
+
+**3. Learning Rate Plot**
+- **X-axis**: Epoch number
+- **Y-axis**: Learning rate (log scale)
+- **Purpose**: Verify learning rate scheduling
+- **What to look for**: Should decrease in steps when validation loss plateaus (ReduceLROnPlateau)
+
+**4. Epoch Times Plot**
+- **X-axis**: Epoch number
+- **Y-axis**: Time in seconds
+- **Purpose**: Detect performance issues or slowdowns
+- **What to look for**: Consistent times; sudden increases may indicate memory issues
+
+**5. Combined Metrics Plot**
+- **Layout**: 2x2 grid with all metrics
+- **Purpose**: Single comprehensive view of training progress
+- **Use this for**: Quick overview of how training is going
+
+**6. Overfitting Analysis Plot**
+- **Lines**: Train and validation loss
+- **Shaded area**: Generalization gap (orange)
+- **Purpose**: Detect if model is overfitting
+- **What to look for**: If gap grows quickly, consider:
+  - Increasing dropout
+  - Reducing model size
+  - Adding regularization
+  - Getting more training data
+
+**7. Summary Statistics**
+- **Format**: Text-based summary
+- **Contains**: Best metrics, total time, final metrics, improvement stats
+- **Purpose**: Quick reference for report writing
+
+### Example Workflow
+
+```bash
+# 1. Train RNN model (plots generated automatically)
+python scripts/train.py --model rnn
+# Check results/plots/ for rnn_combined_metrics_epoch_10.png
+
+# 2. Train Transformer model (plots generated automatically)
+python scripts/train.py --model transformer
+# Check results/plots/ for transformer_combined_metrics_epoch_10.png
+
+# 3. Compare both models
+python scripts/visualize_metrics.py --compare
+# Check results/plots/model_comparison.png
+
+# 4. View plots
+open results/plots/rnn_combined_metrics_epoch_10.png
+open results/plots/transformer_combined_metrics_epoch_10.png
+open results/plots/model_comparison.png
+```
+
+### Tips for Using Plots
+
+1. **Monitor during training** - Open the plots folder and refresh to see latest updates
+
+2. **Use combined metrics plot** - This gives you the best overview at a glance
+
+3. **Watch for overfitting early** - Check the overfitting analysis plot regularly
+
+4. **Compare final results** - Always run the comparison script after training both models
+
+5. **Use plots in your report** - All plots are 150 DPI, suitable for academic papers
+
+6. **Check learning rate changes** - Learning rate should decrease when validation loss plateaus
+
+### Troubleshooting
+
+**Issue**: No plots generated
+- **Solution**: Check that `plot_every_n_epochs` in config is not too high
+
+**Issue**: Plots folder doesn't exist
+- **Solution**: The folder is created automatically, but ensure `results/` directory exists
+
+**Issue**: Want to disable plotting temporarily
+- **Solution**: Set `plot_every_n_epochs` to a very high number (e.g., 999) in `utils/config.py`
+
+**Issue**: Plots look strange after resuming training
+- **Solution**: This is normal - plots show all epochs including resumed ones
+
+### Customization
+
+To modify plot appearance, edit `utils/plotting.py`:
+
+- **Colors**: Change line colors in plot functions (e.g., `'b-o'` for blue, `'r-s'` for red)
+- **Figure size**: Modify `figsize` parameter (e.g., `figsize=(10, 6)`)
+- **DPI**: Change `dpi=150` to higher/lower resolution
+- **Font sizes**: Adjust `fontsize` parameters
+- **Grid style**: Modify `grid()` parameters
+
+---
+
 ### Step 6: Compare Models
 
 After training and evaluating both models:
 
 ```bash
 # Evaluate both on test
-python scripts/evaluate.py --model rnn --checkpoint checkpoints/rnn_best.pt --data test
-python scripts/evaluate.py --model transformer --checkpoint checkpoints/transformer_best.pt --data test
+python scripts/evaluate.py --model rnn --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt --data test
+python scripts/evaluate.py --model transformer --checkpoint checkpoints/shopping_1_general_corpus_transformer_best.pt --data test
 
 # Evaluate both on Wikipedia
-python scripts/evaluate.py --model rnn --checkpoint checkpoints/rnn_best.pt --data wikipedia
-python scripts/evaluate.py --model transformer --checkpoint checkpoints/transformer_best.pt --data wikipedia
+python scripts/evaluate.py --model rnn --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt --data wikipedia
+python scripts/evaluate.py --model transformer --checkpoint checkpoints/shopping_1_general_corpus_transformer_best.pt --data wikipedia
 
 # Generate from both
-python scripts/generate.py --model rnn --checkpoint checkpoints/rnn_best.pt --prompts-file data/prompts.txt
-python scripts/generate.py --model transformer --checkpoint checkpoints/transformer_best.pt --prompts-file data/prompts.txt
+python scripts/generate.py --model rnn --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt --prompts-file data/prompts.txt
+python scripts/generate.py --model transformer --checkpoint checkpoints/shopping_1_general_corpus_transformer_best.pt --prompts-file data/prompts.txt
 ```
 
 **Create comparison table for your report:**
@@ -1242,19 +1458,23 @@ python scripts/preprocess_data.py --input data/raw/file.txt --config rnn --file-
 python scripts/train.py --model rnn
 python scripts/train.py --model transformer
 
-# Evaluate
-python scripts/evaluate.py --model rnn --checkpoint checkpoints/rnn_best.pt --data test
-python scripts/evaluate.py --model transformer --checkpoint checkpoints/transformer_best.pt --data test
+# Evaluate (dataset auto-detected)
+python scripts/evaluate.py --model rnn --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt --data test
+python scripts/evaluate.py --model transformer --checkpoint checkpoints/shopping_1_general_corpus_transformer_best.pt --data test
 
 # Generate
-python scripts/generate.py --model rnn --checkpoint checkpoints/rnn_best.pt --prompts "Your prompt"
+python scripts/generate.py --model rnn --checkpoint checkpoints/shopping_1_general_corpus_rnn_best.pt --prompts "Your prompt"
 
 # Resume training
-python scripts/train.py --model rnn --resume checkpoints/rnn_epoch_4.pt
+python scripts/train.py --model rnn --resume checkpoints/shopping_1_general_corpus_rnn_epoch_4.pt
 
 # Custom generation
-python scripts/generate.py --model transformer --checkpoint checkpoints/transformer_best.pt \
+python scripts/generate.py --model transformer --checkpoint checkpoints/shopping_1_general_corpus_transformer_best.pt \
   --prompts-file data/prompts.txt --max-length 150 --temperature 0.7 --top-k 40
+
+# Visualize training metrics (plots generated automatically during training)
+python scripts/visualize_metrics.py --metrics results/shopping_1_general_corpus_rnn_metrics.json
+python scripts/visualize_metrics.py --compare  # Compare RNN vs Transformer
 ```
 
 ---

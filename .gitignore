@@ -32,6 +32,7 @@ results/*.txt
 results/*.png
 results/*.json
 results/*.csv
+results/plots/*.png
 
 CLAUDE.md
 speakleash_datasets_metadata/*
