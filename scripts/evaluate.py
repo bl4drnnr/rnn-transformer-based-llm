@@ -25,6 +25,8 @@ def evaluate(
     model_type: str,
     checkpoint_path: str,
     data_type: str = "test",
+    dataset: str = None,
+    eval_dataset: str = None,
 ):
     """
     Evaluate a trained model.
@@ -32,7 +34,9 @@ def evaluate(
     Args:
         model_type: Type of model ('rnn' or 'transformer')
         checkpoint_path: Path to model checkpoint
-        data_type: Type of data to evaluate on ('test', 'val', or 'wikipedia')
+        data_type: Type of data to evaluate on ('test', 'val', or 'out-of-domain')
+        dataset: Dataset name for model (auto-detected if not specified)
+        eval_dataset: Dataset name for out-of-domain evaluation (e.g., 'plwiki')
     """
     print("=" * 80)
     print(f"EVALUATING {model_type.upper()} LANGUAGE MODEL")
@@ -40,29 +44,54 @@ def evaluate(
 
     # Load configuration
     config = get_config(model_type)
-    print(f"\nConfiguration: {config}")
+
+    # Auto-detect dataset if not specified
+    if dataset is None:
+        metadata_files = list(config.data_processed_dir.glob("*_metadata.json"))
+        if not metadata_files:
+            raise ValueError("No preprocessed dataset found.")
+        if len(metadata_files) > 1:
+            raise ValueError(f"Multiple datasets found. Please specify --dataset")
+        dataset = metadata_files[0].stem.replace('_metadata', '')
+        print(f"\nAuto-detected dataset: {dataset}")
+
+    config.dataset_name = dataset
+    print(f"Dataset: {dataset}")
+    print(f"Configuration: {config}")
     print(f"Device: {config.device}")
 
     # Load metadata
-    with open(config.data_processed_dir / "metadata.json", "r") as f:
+    with open(config.data_processed_dir / f"{dataset}_metadata.json", "r") as f:
         metadata = json.load(f)
         pad_token_id = metadata["pad_token_id"]
 
     # Load data based on type
-    print(f"\nLoading {data_type} data...")
     if data_type == "test":
-        eval_ids = torch.load(config.data_processed_dir / "test_ids.pt")
+        print(f"\nLoading test data from {dataset}...")
+        eval_ids = torch.load(config.data_processed_dir / f"{dataset}_test_ids.pt")
+        eval_dataset_name = dataset
     elif data_type == "val":
-        eval_ids = torch.load(config.data_processed_dir / "val_ids.pt")
-    elif data_type == "wikipedia":
-        wiki_path = config.data_processed_dir / "wikipedia_ids.pt"
-        if not wiki_path.exists():
-            print(f"Error: Wikipedia data not found at {wiki_path}")
-            print("Please preprocess Wikipedia data first.")
+        print(f"\nLoading validation data from {dataset}...")
+        eval_ids = torch.load(config.data_processed_dir / f"{dataset}_val_ids.pt")
+        eval_dataset_name = dataset
+    elif data_type == "out-of-domain":
+        if eval_dataset is None:
+            raise ValueError("--eval-dataset must be specified when using --data out-of-domain")
+        print(f"\nLoading out-of-domain data from {eval_dataset}...")
+
+        # Try to load test set from the out-of-domain dataset
+        ood_test_path = config.data_processed_dir / f"{eval_dataset}_test_ids.pt"
+        if not ood_test_path.exists():
+            print(f"Error: Out-of-domain dataset not found at {ood_test_path}")
+            print(f"Available datasets in {config.data_processed_dir}:")
+            metadata_files = list(config.data_processed_dir.glob("*_metadata.json"))
+            for mf in metadata_files:
+                print(f"  - {mf.stem.replace('_metadata', '')}")
             return
-        eval_ids = torch.load(wiki_path)
+        eval_ids = torch.load(ood_test_path)
+        eval_dataset_name = eval_dataset
     else:
-        raise ValueError(f"Unknown data type: {data_type}")
+        raise ValueError(f"Unknown data type: {data_type}. Use 'test', 'val', or 'out-of-domain'")
 
     print(f"Loaded {len(eval_ids)} sequences")
 
@@ -84,7 +113,7 @@ def evaluate(
 
     # Load checkpoint
     print(f"\nLoading checkpoint from {checkpoint_path}...")
-    checkpoint = torch.load(checkpoint_path, map_location=config.device)
+    checkpoint = torch.load(checkpoint_path, map_location=config.device, weights_only=False)
 
     # Create model
     print("Initializing model...")
@@ -153,6 +182,8 @@ def evaluate(
     # Save results
     results = {
         "model_type": model_type,
+        "model_dataset": dataset,
+        "eval_dataset": eval_dataset_name,
         "checkpoint": str(checkpoint_path),
         "data_type": data_type,
         "num_sequences": len(eval_ids),
@@ -163,7 +194,13 @@ def evaluate(
         "tokens_per_second": tokens_per_second,
     }
 
-    results_path = config.results_dir / f"{model_type}_eval_{data_type}.json"
+    # Create results filename
+    if data_type == "out-of-domain":
+        results_filename = f"{dataset}_{model_type}_eval_ood_{eval_dataset_name}.json"
+    else:
+        results_filename = f"{dataset}_{model_type}_eval_{data_type}.json"
+
+    results_path = config.results_dir / results_filename
     with open(results_path, "w") as f:
         json.dump(results, f, indent=2)
 
@@ -189,8 +226,20 @@ def main():
         "--data",
         type=str,
         default="test",
-        choices=["test", "val", "wikipedia"],
-        help="Data to evaluate on",
+        choices=["test", "val", "out-of-domain"],
+        help="Data to evaluate on: 'test' (in-domain), 'val' (validation), 'out-of-domain' (requires --eval-dataset)",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default=None,
+        help="Model's training dataset name. Auto-detected if only one dataset exists.",
+    )
+    parser.add_argument(
+        "--eval-dataset",
+        type=str,
+        default=None,
+        help="Dataset name for out-of-domain evaluation (e.g., 'plwiki'). Required when --data is 'out-of-domain'.",
     )
 
     args = parser.parse_args()
@@ -200,7 +249,7 @@ def main():
         print(f"Error: Checkpoint not found: {checkpoint_path}")
         return
 
-    evaluate(args.model, str(checkpoint_path), args.data)
+    evaluate(args.model, str(checkpoint_path), args.data, args.dataset, args.eval_dataset)
 
 
 if __name__ == "__main__":

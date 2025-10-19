@@ -12,6 +12,9 @@ from pathlib import Path
 class Config:
     """Global configuration for the project."""
 
+    # Dataset name (will be set from preprocessing/training)
+    dataset_name: str = "default"
+
     # Paths
     project_root: Path = Path(__file__).parent.parent
     data_raw_dir: Path = project_root / "data" / "raw"

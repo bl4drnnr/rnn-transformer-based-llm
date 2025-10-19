@@ -35,9 +35,14 @@ def preprocess_data(
     print("DATA PREPROCESSING")
     print("=" * 80)
 
+    # Extract dataset name from input file
+    dataset_name = Path(input_file).stem  # e.g., "shopping_1_general_corpus"
+
     # Load configuration
     config = get_config(config_type)
-    print(f"\nConfiguration: {config}")
+    config.dataset_name = dataset_name
+    print(f"\nDataset: {dataset_name}")
+    print(f"Configuration: {config}")
     print(f"Device: {config.device}")
 
     # Load raw text data
@@ -69,7 +74,7 @@ def preprocess_data(
     tokenizer.train(train_texts)
 
     # Save tokenizer
-    tokenizer_path = config.data_processed_dir / "tokenizer.json"
+    tokenizer_path = config.data_processed_dir / f"{dataset_name}_tokenizer.json"
     tokenizer.save(tokenizer_path)
 
     # Tokenize all splits
@@ -105,12 +110,13 @@ def preprocess_data(
 
     # Save tokenized data
     print("\nSaving preprocessed data...")
-    torch.save(train_ids, config.data_processed_dir / "train_ids.pt")
-    torch.save(val_ids, config.data_processed_dir / "val_ids.pt")
-    torch.save(test_ids, config.data_processed_dir / "test_ids.pt")
+    torch.save(train_ids, config.data_processed_dir / f"{dataset_name}_train_ids.pt")
+    torch.save(val_ids, config.data_processed_dir / f"{dataset_name}_val_ids.pt")
+    torch.save(test_ids, config.data_processed_dir / f"{dataset_name}_test_ids.pt")
 
     # Save metadata
     metadata = {
+        "dataset_name": dataset_name,
         "num_train": len(train_ids),
         "num_val": len(val_ids),
         "num_test": len(test_ids),
@@ -125,7 +131,7 @@ def preprocess_data(
     }
 
     import json
-    with open(config.data_processed_dir / "metadata.json", "w") as f:
+    with open(config.data_processed_dir / f"{dataset_name}_metadata.json", "w") as f:
         json.dump(metadata, f, indent=2)
 
     print("\nPreprocessing complete!")
