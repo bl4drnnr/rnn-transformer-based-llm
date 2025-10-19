@@ -43,6 +43,9 @@ class Config:
     # Model saving
     save_every_n_epochs: int = 2
 
+    # Plotting
+    plot_every_n_epochs: int = 1  # Generate plots after every N epochs
+
     # Evaluation
     eval_batch_size: int = 64
 

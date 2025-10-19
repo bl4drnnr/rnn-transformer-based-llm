@@ -17,6 +17,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from utils.config import get_config, RNNConfig, TransformerConfig
 from utils.dataset import create_dataloaders
 from utils.metrics import MetricsTracker, evaluate_model, calculate_perplexity
+from utils.plotting import TrainingPlotter
 from models.rnn_model import RNNLanguageModel
 from models.transformer_model import TransformerLanguageModel
 
@@ -166,11 +167,13 @@ def train(
         mode='min',
         factor=0.5,
         patience=2,
-        verbose=True,
     )
 
     # Metrics tracker
     metrics = MetricsTracker()
+
+    # Initialize plotter
+    plotter = TrainingPlotter(save_dir=config.results_dir, model_name=model_type)
 
     # Resume from checkpoint if specified
     start_epoch = 0
@@ -263,6 +266,9 @@ def train(
             }, best_model_path)
             print(f"  Best model saved: {best_model_path}")
 
+        # Generate and save plots
+        plotter.plot_all_metrics(metrics, epoch, plot_frequency=config.plot_every_n_epochs)
+
     # Training complete
     print("\n" + "=" * 80)
     print("TRAINING COMPLETE")
@@ -275,7 +281,11 @@ def train(
     metrics_path = config.results_dir / f"{model_type}_metrics.json"
     metrics.save(str(metrics_path))
 
+    # Create final summary plot
+    plotter.create_final_summary_plot(metrics_path)
+
     print(f"\nMetrics saved to: {metrics_path}")
+    print(f"Training plots saved to: {plotter.plots_dir}")
     print("=" * 80)
 
 

@@ -10,10 +10,11 @@
 4. [Installation](#installation)
 5. [Complete Workflow](#complete-workflow)
 6. [Detailed Usage Guide](#detailed-usage-guide)
-7. [Configuration](#configuration)
-8. [Evaluation Metrics](#evaluation-metrics)
-9. [Tips & Troubleshooting](#tips--troubleshooting)
-10. [Expected Results](#expected-results)
+7. [Training Visualization & Plotting](#training-visualization--plotting)
+8. [Configuration](#configuration)
+9. [Evaluation Metrics](#evaluation-metrics)
+10. [Tips & Troubleshooting](#tips--troubleshooting)
+11. [Expected Results](#expected-results)
 
 ---
 
@@ -33,6 +34,7 @@ This project implements and compares two neural language model architectures for
 - **Perplexity Metrics** - Standard metric for language model quality
 - **Time Tracking** - Training and inference time measurement
 - **Text Generation** - Autoregressive text generation with temperature and top-k sampling
+- **Training Visualization** - Automated plotting of loss, perplexity, learning rate, and training time
 - **Mac Optimized** - MPS (Metal Performance Shaders) support for Apple Silicon
 
 ### Lab Assignment Context
@@ -333,14 +335,16 @@ This prevents the model from "cheating" by seeing future tokens.
 │   ├── config.py              # Configuration classes
 │   ├── tokenizer.py           # BPE tokenizer
 │   ├── dataset.py             # PyTorch datasets and dataloaders
-│   └── metrics.py             # Perplexity and evaluation metrics
+│   ├── metrics.py             # Perplexity and evaluation metrics
+│   └── plotting.py            # Training visualization utilities
 │
 ├── scripts/                    # Executable scripts
 │   ├── __init__.py
 │   ├── preprocess_data.py     # Data preprocessing pipeline
-│   ├── train.py               # Model training
+│   ├── train.py               # Model training (with automatic plotting)
 │   ├── evaluate.py            # Model evaluation
-│   └── generate.py            # Text generation
+│   ├── generate.py            # Text generation
+│   └── visualize_metrics.py   # Standalone visualization and comparison
 │
 ├── checkpoints/                # Saved model checkpoints
 │   ├── rnn_best.pt            # Best RNN model
@@ -349,6 +353,12 @@ This prevents the model from "cheating" by seeing future tokens.
 │   └── transformer_epoch_N.pt # Transformer checkpoints
 │
 ├── results/                    # Evaluation results
+│   ├── plots/                 # Training visualization plots (auto-generated)
+│   │   ├── rnn_loss_epoch_N.png
+│   │   ├── rnn_perplexity_epoch_N.png
+│   │   ├── rnn_combined_metrics_epoch_N.png
+│   │   ├── transformer_*.png
+│   │   └── model_comparison.png
 │   ├── rnn_metrics.json       # RNN training history
 │   ├── rnn_eval_test.json     # RNN test evaluation
 │   ├── rnn_eval_wikipedia.json # RNN Wikipedia evaluation
@@ -902,6 +912,210 @@ Time: 0.234s
 
 ---
 
+## Training Visualization & Plotting
+
+The project includes an automated plotting system that tracks and visualizes training metrics in real-time. Plots are automatically generated during training to help you monitor model performance.
+
+### Features
+
+**Automatic Plot Generation During Training**
+
+When you run `python scripts/train.py --model rnn` or `python scripts/train.py --model transformer`, plots are automatically generated and saved after each epoch (by default).
+
+**Generated Plots**
+
+The system creates 6 different types of plots:
+
+1. **Loss Plot** - Training and validation loss over epochs
+2. **Perplexity Plot** - Training and validation perplexity over epochs
+3. **Learning Rate Plot** - Learning rate schedule (log scale)
+4. **Epoch Times Plot** - Time taken per epoch with average line
+5. **Combined Metrics Plot** - All metrics in a 2x2 grid
+6. **Overfitting Analysis** - Train vs val loss with generalization gap visualization
+7. **Summary Statistics** - Text-based summary of key metrics (generated at the end)
+
+**Plot Location**
+
+All plots are saved in: `results/plots/`
+
+- Individual plots: `results/plots/{model}_loss_epoch_{N}.png`
+- Combined plots: `results/plots/{model}_combined_metrics_epoch_{N}.png`
+- Final summary: `results/plots/{model}_summary_stats.png`
+
+### Usage
+
+**During Training (Automatic)**
+
+Plots are automatically generated when you train:
+
+```bash
+python scripts/train.py --model rnn
+# Plots automatically created in results/plots/ after each epoch
+```
+
+Example output:
+```
+Epoch 5 Summary:
+  Train Loss: 4.2341 | Train PPL: 68.87
+  Val Loss:   4.1123 | Val PPL:   61.23
+  LR: 0.001000 | Time: 153.2s
+  Best model saved: checkpoints/rnn_best.pt
+
+Generating training plots (Epoch 5)...
+Plots saved to: /path/to/results/plots
+```
+
+**Control Plot Frequency**
+
+Edit `utils/config.py` to control how often plots are generated:
+
+```python
+plot_every_n_epochs: int = 1  # Generate plots every N epochs
+```
+
+- Set to `1`: Plot after every epoch (default, recommended)
+- Set to `2`: Plot every 2 epochs (faster training, less I/O)
+- Set to `5`: Plot every 5 epochs (minimal overhead)
+
+**Manual Visualization from Saved Metrics**
+
+Recreate plots from saved metrics JSON files:
+
+```bash
+# Visualize specific model
+python scripts/visualize_metrics.py --metrics results/rnn_metrics.json
+
+# Visualize with custom name
+python scripts/visualize_metrics.py --metrics results/rnn_metrics.json --model-name "MyRNN"
+```
+
+**Compare RNN vs Transformer**
+
+Create side-by-side comparison plots:
+
+```bash
+# Compare both models
+python scripts/visualize_metrics.py --compare
+
+# With custom paths
+python scripts/visualize_metrics.py --compare \
+  --rnn-metrics results/rnn_metrics.json \
+  --transformer-metrics results/transformer_metrics.json
+```
+
+This creates:
+- `results/plots/model_comparison.png` - Side-by-side loss and perplexity comparison
+- Summary statistics table in terminal
+
+### Understanding the Plots
+
+**1. Loss Plot**
+- **X-axis**: Epoch number
+- **Y-axis**: Cross-entropy loss
+- **Lines**: Blue (train), Red (validation)
+- **Purpose**: Primary metric for training convergence
+- **What to look for**: Both lines should decrease; if validation stops decreasing while training continues, you may be overfitting
+
+**2. Perplexity Plot**
+- **X-axis**: Epoch number
+- **Y-axis**: Perplexity (exp of loss)
+- **Lines**: Blue (train), Red (validation)
+- **Purpose**: More interpretable metric (lower is better)
+- **What to look for**: Lower values indicate better predictions; validation perplexity should track training perplexity
+
+**3. Learning Rate Plot**
+- **X-axis**: Epoch number
+- **Y-axis**: Learning rate (log scale)
+- **Purpose**: Verify learning rate scheduling
+- **What to look for**: Should decrease in steps when validation loss plateaus (ReduceLROnPlateau)
+
+**4. Epoch Times Plot**
+- **X-axis**: Epoch number
+- **Y-axis**: Time in seconds
+- **Purpose**: Detect performance issues or slowdowns
+- **What to look for**: Consistent times; sudden increases may indicate memory issues
+
+**5. Combined Metrics Plot**
+- **Layout**: 2x2 grid with all metrics
+- **Purpose**: Single comprehensive view of training progress
+- **Use this for**: Quick overview of how training is going
+
+**6. Overfitting Analysis Plot**
+- **Lines**: Train and validation loss
+- **Shaded area**: Generalization gap (orange)
+- **Purpose**: Detect if model is overfitting
+- **What to look for**: If gap grows quickly, consider:
+  - Increasing dropout
+  - Reducing model size
+  - Adding regularization
+  - Getting more training data
+
+**7. Summary Statistics**
+- **Format**: Text-based summary
+- **Contains**: Best metrics, total time, final metrics, improvement stats
+- **Purpose**: Quick reference for report writing
+
+### Example Workflow
+
+```bash
+# 1. Train RNN model (plots generated automatically)
+python scripts/train.py --model rnn
+# Check results/plots/ for rnn_combined_metrics_epoch_10.png
+
+# 2. Train Transformer model (plots generated automatically)
+python scripts/train.py --model transformer
+# Check results/plots/ for transformer_combined_metrics_epoch_10.png
+
+# 3. Compare both models
+python scripts/visualize_metrics.py --compare
+# Check results/plots/model_comparison.png
+
+# 4. View plots
+open results/plots/rnn_combined_metrics_epoch_10.png
+open results/plots/transformer_combined_metrics_epoch_10.png
+open results/plots/model_comparison.png
+```
+
+### Tips for Using Plots
+
+1. **Monitor during training** - Open the plots folder and refresh to see latest updates
+
+2. **Use combined metrics plot** - This gives you the best overview at a glance
+
+3. **Watch for overfitting early** - Check the overfitting analysis plot regularly
+
+4. **Compare final results** - Always run the comparison script after training both models
+
+5. **Use plots in your report** - All plots are 150 DPI, suitable for academic papers
+
+6. **Check learning rate changes** - Learning rate should decrease when validation loss plateaus
+
+### Troubleshooting
+
+**Issue**: No plots generated
+- **Solution**: Check that `plot_every_n_epochs` in config is not too high
+
+**Issue**: Plots folder doesn't exist
+- **Solution**: The folder is created automatically, but ensure `results/` directory exists
+
+**Issue**: Want to disable plotting temporarily
+- **Solution**: Set `plot_every_n_epochs` to a very high number (e.g., 999) in `utils/config.py`
+
+**Issue**: Plots look strange after resuming training
+- **Solution**: This is normal - plots show all epochs including resumed ones
+
+### Customization
+
+To modify plot appearance, edit `utils/plotting.py`:
+
+- **Colors**: Change line colors in plot functions (e.g., `'b-o'` for blue, `'r-s'` for red)
+- **Figure size**: Modify `figsize` parameter (e.g., `figsize=(10, 6)`)
+- **DPI**: Change `dpi=150` to higher/lower resolution
+- **Font sizes**: Adjust `fontsize` parameters
+- **Grid style**: Modify `grid()` parameters
+
+---
+
 ### Step 6: Compare Models
 
 After training and evaluating both models:
@@ -1255,6 +1469,10 @@ python scripts/train.py --model rnn --resume checkpoints/rnn_epoch_4.pt
 # Custom generation
 python scripts/generate.py --model transformer --checkpoint checkpoints/transformer_best.pt \
   --prompts-file data/prompts.txt --max-length 150 --temperature 0.7 --top-k 40
+
+# Visualize training metrics (plots generated automatically during training)
+python scripts/visualize_metrics.py --metrics results/rnn_metrics.json
+python scripts/visualize_metrics.py --compare  # Compare RNN vs Transformer
 ```
 
 ---
